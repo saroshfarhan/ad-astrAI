@@ -11,5 +11,13 @@ __pycache__/
 # Secrets
 .env
 
+# MLflow
 /mlruns
 /mlartifacts
+*.db
+
+# Claude Code
+.claude/
+
+# Service logs
+spectral_service.log
