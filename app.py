@@ -129,7 +129,7 @@ if uploaded_file:
     
     # Analysis Trigger
     if not st.session_state.analysis_complete:
-        if st.button("🚀 Launch Analysis", type="primary", use_container_width=True):
+        if st.button("🚀 Launch Analysis", type="primary", width="stretch"):
             # Save temp file
             with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp:
                 tmp.write(uploaded_file.getbuffer())
