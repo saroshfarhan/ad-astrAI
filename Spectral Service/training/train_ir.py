@@ -105,10 +105,15 @@ def make_channels(wave: np.ndarray, flux: np.ndarray, baseline_win: int = 151) -
 # ============================================================================
 
 def build_augmented_dataset(win: int, n_augment: int, seed0: int):
-    """Build training dataset with augmentation."""
+    """Build training dataset with augmentation.
+
+    IMPORTANT: Splits by planet, not by sample, to prevent data leakage.
+    All augmentations of a planet stay together in either train or val.
+    """
     ir_files = detect_ir_files()
 
-    X_all, Y_all = [], []
+    # Build dataset planet-by-planet
+    planet_datasets = []
 
     for planet_idx, (planet_name, pkl_path) in enumerate(ir_files.items()):
         # Load real spectrum
@@ -125,21 +130,61 @@ def build_augmented_dataset(win: int, n_augment: int, seed0: int):
         )
 
         # Preprocess each
+        X_planet, Y_planet = [], []
         for wave_aug, flux_aug in zip(waves_aug, fluxes_aug):
             wave_fix, flux_fix = resample_to_fixed(wave_aug, flux_aug, N_RESAMPLE)
             X = make_channels(wave_fix, flux_fix, win)
-            X_all.append(X)
-            Y_all.append(labels)
+            X_planet.append(X)
+            Y_planet.append(labels)
 
-    X = np.array(X_all, dtype=np.float32)
-    Y = np.array(Y_all, dtype=np.float32)
+        planet_datasets.append({
+            'name': planet_name,
+            'X': np.array(X_planet, dtype=np.float32),
+            'Y': np.array(Y_planet, dtype=np.float32)
+        })
 
-    # Shuffle and split
     rng = np.random.default_rng(seed0 + 999)
-    perm = rng.permutation(len(X))
-    X, Y = X[perm], Y[perm]
-    n_train = int(0.9 * len(X))
-    return X[:n_train], Y[:n_train], X[n_train:], Y[n_train:]
+
+    # If we have <=3 planets, use sample-level split (data leakage acceptable for now)
+    # Otherwise use planet-level split
+    if len(planet_datasets) <= 3:
+        print(f"  WARNING: Only {len(planet_datasets)} IR planets detected.")
+        print(f"  Using sample-level split (data leakage) until more planets are added.")
+        print(f"  Recommendation: Add 4+ IR planets for proper planet-level validation.")
+
+        # Combine all planets
+        X_all = np.concatenate([p['X'] for p in planet_datasets], axis=0)
+        Y_all = np.concatenate([p['Y'] for p in planet_datasets], axis=0)
+
+        # Random shuffle and split
+        perm = rng.permutation(len(X_all))
+        X_all, Y_all = X_all[perm], Y_all[perm]
+        n_train = int(0.85 * len(X_all))
+
+        return X_all[:n_train], Y_all[:n_train], X_all[n_train:], Y_all[n_train:]
+
+    else:
+        # Planet-level train/val split (80/20 by planet count)
+        rng.shuffle(planet_datasets)
+        n_val_planets = max(1, len(planet_datasets) // 5)
+
+        train_planets = planet_datasets[n_val_planets:]
+        val_planets = planet_datasets[:n_val_planets]
+
+        print(f"  Train planets: {[p['name'] for p in train_planets]}")
+        print(f"  Val planets: {[p['name'] for p in val_planets]}")
+
+        # Combine within each split
+        X_train = np.concatenate([p['X'] for p in train_planets], axis=0)
+        Y_train = np.concatenate([p['Y'] for p in train_planets], axis=0)
+        X_val = np.concatenate([p['X'] for p in val_planets], axis=0)
+        Y_val = np.concatenate([p['Y'] for p in val_planets], axis=0)
+
+        # Shuffle within each split
+        train_perm = rng.permutation(len(X_train))
+        val_perm = rng.permutation(len(X_val))
+
+        return X_train[train_perm], Y_train[train_perm], X_val[val_perm], Y_val[val_perm]
 
 
 # ============================================================================

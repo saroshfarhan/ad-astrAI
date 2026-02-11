@@ -117,8 +117,16 @@ Respond with JSON only:
                         ("human", json.dumps(context, default=str))
                     ])
 
-                    # Parse LLM response
-                    decision = json.loads(response.content)
+                    # Parse LLM response (handle markdown-wrapped JSON)
+                    content = response.content.strip()
+
+                    # Remove markdown code blocks if present
+                    if content.startswith("```"):
+                        # Find the first and last ``` markers
+                        lines = content.split('\n')
+                        content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+
+                    decision = json.loads(content)
 
                     # Log LLM decision to span
                     span.set_attribute("llm_route_decision", decision.get("route", "unknown"))
@@ -131,24 +139,24 @@ Respond with JSON only:
                         pass
 
             except Exception as exc:
-            # Log LLM failure
-            try:
-                mlflow.log_metric("orchestrator_llm_failure", 1)
-                mlflow.log_param("orchestrator_llm_error", str(exc)[:100])
-            except Exception:
-                pass
-            
-            # Fallback to rule-based routing if LLM fails
-            state.setdefault("errors", []).append(f"LLM routing failed: {exc}, using fallback")
-            
-            with mlflow.start_span(name="fallback_routing") as span:
-                decision = self._fallback_routing(file_ext, Path(input_path).name)
-                span.set_attribute("fallback_route", decision.get("route", "unknown"))
-                
+                # Log LLM failure
                 try:
-                    mlflow.log_metric("orchestrator_fallback_used", 1)
+                    mlflow.log_metric("orchestrator_llm_failure", 1)
+                    mlflow.log_param("orchestrator_llm_error", str(exc)[:100])
                 except Exception:
                     pass
+
+                # Fallback to rule-based routing if LLM fails
+                state.setdefault("errors", []).append(f"LLM routing failed: {exc}, using fallback")
+
+                with mlflow.start_span(name="fallback_routing") as span:
+                    decision = self._fallback_routing(file_ext, Path(input_path).name)
+                    span.set_attribute("fallback_route", decision.get("route", "unknown"))
+
+                    try:
+                        mlflow.log_metric("orchestrator_fallback_used", 1)
+                    except Exception:
+                        pass
         
         # Update state with routing decision
         route = decision.get("route", "error")

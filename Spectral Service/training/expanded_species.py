@@ -88,39 +88,119 @@ IR_SPECIES_EXPANDED = [
 
 PLANET_COMPOSITIONS_UV = {
     "JUPITER": {
-        "CH4": 1, "NH3": 1, "C2H2": 1, "C2H6": 1, "C3H4": 1, "C3H8": 1,
-        "C4H2": 1, "C6H6": 1, "PH3": 1, "H2O": 1, "CO": 1, "HCN": 1,
-        # Others assumed absent or unconfirmed
+        # Hydrocarbons
+        "CH4": 1, "C2H2": 1, "C2H4": 1, "C2H6": 1, "C3H4": 1, "C6H6": 1,
+        # Nitrogen compounds
+        "NH3": 1, "HCN": 1,
+        # Oxygen compounds
+        "CO": 1, "CO2": 1, "H2O": 1,
+        # Sulfur compounds
+        "H2S": 1, "OCS": 1,
+        # Others
+        "PH3": 1, "GeH4": 1, "AsH3": 1,
+        # Source: Galileo/Cassini/HST/JWST
     },
     "SATURN": {
-        "CH4": 1, "NH3": 1, "C2H2": 1, "C2H6": 1, "C3H4": 1, "C3H8": 1,
-        "C4H2": 1, "C6H6": 1, "PH3": 1, "H2O": 1,
+        # Hydrocarbons
+        "CH4": 1, "C2H2": 1, "C2H6": 1, "C3H4": 1, "C3H8": 1, "C4H2": 1, "C6H6": 1,
+        # Nitrogen compounds
+        "NH3": 1, "HCN": 1,
+        # Oxygen compounds
+        "CO": 1, "CO2": 1, "H2O": 1,
+        # Sulfur compounds
+        "H2S": 1,
+        # Others
+        "PH3": 1, "GeH4": 1, "AsH3": 1,
+        # Source: Cassini/CIRS/HST
     },
     "URANUS": {
-        "CH4": 1, "C2H2": 1, "C2H6": 1, "C4H2": 1, "C6H6": 1,
-        "H2O": 1, "H2S": 1,
+        # Hydrocarbons
+        "CH4": 1, "C2H2": 1, "C2H6": 1,
+        # Nitrogen compounds
+        "NH3": 1, "HCN": 1,
+        # Oxygen compounds
+        "CO": 1, "CO2": 1, "H2O": 1,
+        # Sulfur compounds
+        "H2S": 1,
+        # Source: Voyager/Gemini-NIFS/HST
     },
     "NEPTUNE": {
-        "CH4": 1, "C2H2": 1, "C2H6": 1, "C4H2": 1,
-        "H2O": 1, "H2S": 1, "HCN": 1,
+        # Hydrocarbons
+        "CH4": 1, "C2H2": 1, "C2H4": 1, "C2H6": 1, "C3H4": 1, "C4H2": 1,
+        # Nitrogen compounds
+        "NH3": 1, "HCN": 1,
+        # Oxygen compounds
+        "CO": 1, "CO2": 1, "H2O": 1,
+        # Sulfur compounds
+        "H2S": 1,
+        # Source: Voyager/HST/JWST
     },
     "MARS": {
-        "CO2": 1, "CO": 1, "H2O": 1, "O3": 1, "N2": 1,
-        # Mars has very different composition (rocky planet)
+        # Hydrocarbons (controversial/trace)
+        "CH4": 1,  # Curiosity detected; TGO disputed
+        # Nitrogen compounds
+        "NO": 1, "N2": 1,
+        # Oxygen compounds
+        "CO": 1, "CO2": 1, "H2O": 1, "O2": 1, "O3": 1,
+        # Source: Curiosity/TGO/MRO
     },
     "VENUS": {
-        "CO2": 1, "SO2": 1, "H2O": 1, "CO": 1, "HCl": 1, "HF": 1,
-        # Venus has hot, dense atmosphere
+        # Nitrogen compounds
+        "NO": 1, "N2": 1,
+        # Oxygen compounds
+        "CO": 1, "CO2": 1, "H2O": 1, "O3": 1, "SO2": 1,
+        # Sulfur compounds
+        "H2S": 1, "OCS": 1,
+        # Source: Venus Express/Akatsuki/ground-based
     },
 }
 
 PLANET_COMPOSITIONS_IR = {
+    "JUPITER": {
+        # Primary IR active
+        "CH4": 1, "NH3": 1, "H2O": 1, "CO2": 1, "CO": 1,
+        "C2H6": 1, "C2H2": 1, "PH3": 1, "H2S": 1,
+        # Secondary IR active
+        "HCN": 1, "C6H6": 1, "C2H4": 1,
+        # Source: Galileo/Cassini/JWST
+    },
     "SATURN": {
-        "CH4": 1, "NH3": 1, "PH3": 1, "C2H6": 1, "C2H2": 1,
-        "C3H8": 1, "C4H10": 1, "H2O": 1,
+        # Primary IR active
+        "CH4": 1, "NH3": 1, "H2O": 1, "CO2": 1, "CO": 1,
+        "C2H6": 1, "C2H2": 1, "PH3": 1, "H2S": 1,
+        # Secondary IR active
+        "C3H8": 1, "HCN": 1, "C6H6": 1, "C4H2": 1,
+        # Source: Cassini/CIRS
     },
     "URANUS": {
-        "CH4": 1, "C2H6": 1, "C2H2": 1, "H2O": 1, "H2S": 1,
+        # Primary IR active
+        "CH4": 1, "NH3": 1, "H2O": 1, "CO2": 1, "CO": 1,
+        "C2H6": 1, "C2H2": 1, "H2S": 1,
+        # Secondary IR active
+        "HCN": 1,
+        # Source: Voyager/Gemini-NIFS
+    },
+    "NEPTUNE": {
+        # Primary IR active
+        "CH4": 1, "NH3": 1, "H2O": 1, "CO2": 1, "CO": 1,
+        "C2H6": 1, "C2H2": 1, "H2S": 1,
+        # Secondary IR active
+        "HCN": 1, "C2H4": 1, "C4H2": 1,
+        # Source: Voyager/HST
+    },
+    "MARS": {
+        # Primary IR active
+        "CH4": 1, "H2O": 1, "CO2": 1, "CO": 1,
+        # Secondary IR active
+        "O3": 1,
+        # Source: Curiosity/TGO
+    },
+    "VENUS": {
+        # Primary IR active
+        "H2O": 1, "CO2": 1, "CO": 1, "SO2": 1, "H2S": 1,
+        # Secondary IR active
+        "O3": 1, "OCS": 1, "HCl": 1, "HF": 1,
+        # Source: Venus Express/Akatsuki
     },
 }
 
