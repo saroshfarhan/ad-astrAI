@@ -32,7 +32,8 @@ class OrchestratorAgent(BaseAgent):
         """
         super().__init__("OrchestratorAgent")
         self.llm = llm or ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
+            #model="gemini-2.0-flash-exp",
+            model="gemini-1.5-flash",
             temperature=0
         )
         self.prompt = self._load_prompt()
