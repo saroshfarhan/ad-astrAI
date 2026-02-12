@@ -33,6 +33,11 @@ N_AUGMENT_PER_PLANET = 75  # Number of augmented versions per planet (50-150)
 N_RESAMPLE = 1024
 BATCH = 128
 
+# Wavelength constraint for IR data (micrometers)
+# Focus on common overlapping region where most planets have coverage
+WAVELENGTH_RANGE = (5.0, 36.0)  # μm - excludes Jupiter (too narrow) and Venus (wrong range)
+MIN_POINTS_IN_RANGE = 100  # Minimum data points required in wavelength range
+
 N_TRIALS = 20  # Optuna trials
 EPOCHS_TUNE = 10
 PATIENCE_TUNE = 3
@@ -46,24 +51,105 @@ PATIENCE_FINAL = 6
 # ============================================================================
 
 def load_pkl_spectrum(p: Path) -> Tuple[str, np.ndarray, np.ndarray]:
-    """Load spectrum from pickle file."""
+    """Load spectrum from pickle file.
+
+    Handles two formats:
+    1. Dictionary format (UV): {'target': ..., 'wavelength': ..., 'flux': ...}
+    2. DataFrame format (IR): DataFrame with columns ['wavelength_um', 'flux_mjy_sr']
+    """
+    import pandas as pd
+
     with open(p, "rb") as f:
         d = pickle.load(f)
-    target = str(d.get("target", p.stem)).upper()
-    w = np.asarray(d.get("wavelength", d.get("wave")), dtype=float)
-    y = np.asarray(d["flux"], dtype=float)
+
+    # Check if DataFrame (IR format)
+    if isinstance(d, pd.DataFrame):
+        target = p.stem.replace("_ir", "").upper()
+
+        # Extract wavelength and flux from DataFrame columns
+        # Handle multiple column name variations
+        wave_col = None
+        flux_col = None
+
+        # Find wavelength column
+        for col in ['wavelength_um', 'wavelength', 'wave', 'Wavelength']:
+            if col in d.columns:
+                wave_col = col
+                break
+
+        # Find flux/radiance column
+        for col in ['flux_mjy_sr', 'flux', 'radiance', 'Flux', 'Radiance']:
+            if col in d.columns:
+                flux_col = col
+                break
+
+        if wave_col is None or flux_col is None:
+            raise ValueError(f"Cannot find wavelength/flux columns in: {list(d.columns)}")
+
+        w = np.asarray(d[wave_col].values, dtype=float)
+        y = np.asarray(d[flux_col].values, dtype=float)
+
+    # Dictionary format (UV format)
+    elif isinstance(d, dict):
+        target = str(d.get("target", p.stem)).upper()
+        w = np.asarray(d.get("wavelength", d.get("wave")), dtype=float)
+        y = np.asarray(d["flux"], dtype=float)
+
+    else:
+        raise ValueError(f"Unknown pickle format: {type(d)}")
+
+    # Clean and sort
     m = np.isfinite(w) & np.isfinite(y)
     w, y = w[m], y[m]
     idx = np.argsort(w)
     return target, w[idx], y[idx]
 
 
+def crop_to_wavelength_range(
+    wave: np.ndarray,
+    flux: np.ndarray,
+    wave_min: float,
+    wave_max: float
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Crop spectrum to specified wavelength range.
+
+    Returns cropped wavelength and flux arrays. Returns empty arrays if
+    insufficient coverage in the specified range.
+    """
+    mask = (wave >= wave_min) & (wave <= wave_max)
+    return wave[mask], flux[mask]
+
+
 def detect_ir_files() -> Dict[str, Path]:
-    """Auto-detect IR spectra files."""
+    """Auto-detect IR spectra files and filter by wavelength coverage.
+
+    Only includes planets with sufficient coverage in WAVELENGTH_RANGE.
+    """
     ir_files = {}
+    skipped = []
+
     for pkl_file in DATA_REAL.glob("*_ir.pkl"):
         planet_name = pkl_file.stem.replace("_ir", "").upper()
-        ir_files[planet_name] = pkl_file
+
+        # Load and check wavelength coverage
+        try:
+            _, wave, flux = load_pkl_spectrum(pkl_file)
+            wave_crop, flux_crop = crop_to_wavelength_range(
+                wave, flux, WAVELENGTH_RANGE[0], WAVELENGTH_RANGE[1]
+            )
+
+            if len(wave_crop) >= MIN_POINTS_IN_RANGE:
+                ir_files[planet_name] = pkl_file
+            else:
+                skipped.append(f"{planet_name} ({len(wave_crop)} pts in range)")
+        except Exception as e:
+            skipped.append(f"{planet_name} (error: {str(e)})")
+
+    if skipped:
+        print(f"\n  Skipped planets (insufficient coverage in {WAVELENGTH_RANGE[0]}-{WAVELENGTH_RANGE[1]} um):")
+        for s in skipped:
+            print(f"    - {s}")
+
     return ir_files
 
 
@@ -91,12 +177,30 @@ def compute_baseline(flux: np.ndarray, win: int = 151) -> np.ndarray:
 
 
 def make_channels(wave: np.ndarray, flux: np.ndarray, baseline_win: int = 151) -> np.ndarray:
-    """Create 3-channel representation: [normalized, 1st derivative, 2nd derivative]."""
+    """Create 3-channel representation: [normalized, 1st derivative, 2nd derivative].
+
+    Uses robust normalization to handle diverse flux scales across different planets.
+    """
+    # Robust baseline normalization
     baseline = compute_baseline(flux, win=baseline_win)
     r = (flux / baseline) - 1.0
-    r = (r - np.median(r)) / (np.std(r) + 1e-8)
+
+    # Robust z-score normalization using median absolute deviation
+    median = np.median(r)
+    mad = np.median(np.abs(r - median))
+    r = (r - median) / (mad * 1.4826 + 1e-8)  # 1.4826 makes MAD consistent with std for normal dist
+
+    # Clip outliers for stability
+    r = np.clip(r, -5, 5)
+
+    # Derivatives (already scale-invariant due to normalization)
     d1 = np.gradient(r, wave)
     d2 = np.gradient(d1, wave)
+
+    # Normalize derivatives independently for stability
+    d1 = (d1 - np.median(d1)) / (np.std(d1) + 1e-8)
+    d2 = (d2 - np.median(d2)) / (np.std(d2) + 1e-8)
+
     return np.stack([r, d1, d2], axis=0).astype(np.float32)
 
 
@@ -118,6 +222,15 @@ def build_augmented_dataset(win: int, n_augment: int, seed0: int):
     for planet_idx, (planet_name, pkl_path) in enumerate(ir_files.items()):
         # Load real spectrum
         _, wave_real, flux_real = load_pkl_spectrum(pkl_path)
+
+        # Crop to wavelength range (focus on overlapping region)
+        wave_real, flux_real = crop_to_wavelength_range(
+            wave_real, flux_real, WAVELENGTH_RANGE[0], WAVELENGTH_RANGE[1]
+        )
+
+        if len(wave_real) < MIN_POINTS_IN_RANGE:
+            print(f"  WARNING: {planet_name} has only {len(wave_real)} points in range, skipping...")
+            continue
 
         # Get labels
         labels = get_labels_for_planet(planet_name, IR_SPECIES_EXPANDED, domain="IR")
@@ -313,9 +426,11 @@ def main():
     print("  IR Model Training (Real Data + Augmentation)")
     print("="*60)
     print(f"DEVICE: {DEVICE}")
+    print(f"Wavelength Range: {WAVELENGTH_RANGE[0]}-{WAVELENGTH_RANGE[1]} um (overlapping region)")
+    print(f"Min points required: {MIN_POINTS_IN_RANGE}")
 
     ir_files = detect_ir_files()
-    print(f"IR planets: {list(ir_files.keys())}")
+    print(f"\nIR planets (after filtering): {list(ir_files.keys())}")
     print(f"Augmentations per planet: {N_AUGMENT_PER_PLANET}")
     print(f"Total samples: ~{len(ir_files) * N_AUGMENT_PER_PLANET}")
     print(f"Species: {len(IR_SPECIES_EXPANDED)} (expanded)")
