@@ -47,13 +47,23 @@ class OrchestratorAgent(BaseAgent):
         return """You are the Orchestrator. Analyze the input file and decide the processing route.
 
 Guidelines:
+- **ALWAYS respect the "modality" field if provided in the context** - this is the user's explicit intent
+- If modality is "spectral" → route to "spectral" (regardless of file extension)
+- If modality is "image" → route to "image" (regardless of file extension)
+- If modality is "both" → route to "both"
+
+File extension fallback (when modality is "unknown"):
 - If file extension is .fits or .csv → "spectral" (spectral analysis)
-- If file extension is .png, .jpg, .jpeg → "image" (image analysis)  
+- If file extension is .png, .jpg, .jpeg → "image" (image analysis)
+- If file extension is .pkl → check filename:
+  - If contains "uv" or "ir" or "combined" → "image" (spectral barcode analysis)
+  - Otherwise → "spectral"
 - If the file could benefit from BOTH analyses → "both" (parallel processing)
 - If unsupported or error → "error"
 
 Consider:
 - FITS files can contain both spectral data AND images
+- PKL files can contain UV/IR spectral data for visualization (image route) or raw spectra (spectral route)
 - For complex astronomical data, both modalities may provide complementary insights
 - Default to single modality unless there's clear benefit to both
 
@@ -67,39 +77,40 @@ Respond with JSON only:
     
     def process(self, state: PipelineState) -> PipelineState:
         """Analyze input and determine routing.
-        
+
         Args:
             state: Pipeline state with input_path
-            
+
         Returns:
             Updated state with route and model selections
         """
         import mlflow
-        
+
         # Validate required fields
         validate_state_fields(state, ["input_path"])
-        
+
         input_path = state["input_path"]
         file_ext = Path(input_path).suffix.lower()
-        
+        modality = state.get("modality", "unknown")
+
         # Log input parameters to MLflow
         try:
             mlflow.log_param("orchestrator_input_file", Path(input_path).name)
             mlflow.log_param("orchestrator_file_extension", file_ext)
-            mlflow.log_param("orchestrator_modality", state.get("modality", "unknown"))
+            mlflow.log_param("orchestrator_modality", modality)
         except Exception:
             pass  # MLflow not configured
-        
+
         # Prepare context for LLM
         context = {
             "file_path": input_path,
             "file_extension": file_ext,
-            "modality": state.get("modality", "unknown")
+            "modality": modality
         }
-        
+
         # Use fallback routing (LLM disabled)
         if self.llm is None:
-            decision = self._fallback_routing(file_ext, Path(input_path).name)
+            decision = self._fallback_routing(file_ext, Path(input_path).name, modality)
             try:
                 mlflow.log_metric("orchestrator_fallback_used", 1)
             except Exception:
@@ -150,7 +161,7 @@ Respond with JSON only:
                 state.setdefault("errors", []).append(f"LLM routing failed: {exc}, using fallback")
 
                 with mlflow.start_span(name="fallback_routing") as span:
-                    decision = self._fallback_routing(file_ext, Path(input_path).name)
+                    decision = self._fallback_routing(file_ext, Path(input_path).name, modality)
                     span.set_attribute("fallback_route", decision.get("route", "unknown"))
 
                     try:
@@ -196,17 +207,39 @@ Respond with JSON only:
         
         return state
     
-    def _fallback_routing(self, file_ext: str, filename: str = "") -> Dict[str, str]:
+    def _fallback_routing(self, file_ext: str, filename: str = "", modality: str = "unknown") -> Dict[str, str]:
         """Rule-based fallback routing when LLM fails.
-        
+
         Args:
-            file_ext: File extension (e.g., ".fits", ".png")
+            file_ext: File extension (e.g., ".fits", ".png", ".pkl")
             filename: Original filename (optional, for heuristic routing)
-            
+            modality: Explicit modality from UI ("spectral", "image", "both", "unknown")
+
         Returns:
             Routing decision dictionary
         """
-        # Heuristic: if filename indicates multi-modal/complex data, route to both
+        # PRIORITY 1: Respect explicit modality from UI
+        if modality == "spectral":
+            return {
+                "route": "spectral",
+                "model_spectral": "mock-spectral-v1",
+                "reasoning": "Fallback: User selected Spectral Analysis mode"
+            }
+        elif modality == "image":
+            return {
+                "route": "image",
+                "model_image": "mock-image-v1",
+                "reasoning": "Fallback: User selected Image Analysis mode"
+            }
+        elif modality == "both":
+            return {
+                "route": "both",
+                "model_spectral": "mock-spectral-v1",
+                "model_image": "mock-image-v1",
+                "reasoning": "Fallback: User requested both analyses"
+            }
+
+        # PRIORITY 2: Heuristic based on filename
         if "complex" in filename.lower() or "multi" in filename.lower():
              return {
                 "route": "both",
@@ -215,6 +248,7 @@ Respond with JSON only:
                 "reasoning": "Fallback: Filename indicates multi-modal data"
             }
 
+        # PRIORITY 3: Route based on file extension
         if file_ext in [".fits", ".csv"]:
             return {
                 "route": "spectral",
@@ -227,6 +261,20 @@ Respond with JSON only:
                 "model_image": "mock-image-v1",
                 "reasoning": "Fallback: Image files routed to image analysis"
             }
+        elif file_ext == ".pkl":
+            # PKL files: default to image (spectral barcodes) if filename suggests it
+            if any(keyword in filename.lower() for keyword in ["uv", "ir", "combined", "jupiter", "mars", "venus", "saturn", "neptune", "uranus"]):
+                return {
+                    "route": "image",
+                    "model_image": "mock-image-v1",
+                    "reasoning": "Fallback: PKL file with planet/spectral keywords routed to image analysis"
+                }
+            else:
+                return {
+                    "route": "spectral",
+                    "model_spectral": "mock-spectral-v1",
+                    "reasoning": "Fallback: PKL file routed to spectral analysis"
+                }
         else:
             return {
                 "route": "error",
