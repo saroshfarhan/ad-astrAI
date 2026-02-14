@@ -248,24 +248,6 @@ gcloud compute firewall-rules update allow-mlflow \
   --source-ranges=YOUR_IP_ADDRESS/32
 ```
 
----
-
-## ✅ Deployment Checklist
-
-- [ ] Created VM on GCP
-- [ ] SSH'd into VM
-- [ ] Installed UV and dependencies
-- [ ] Configured `.env` file
-- [ ] Opened firewall ports
-- [ ] Started all 3 services in tmux
-- [ ] Got public IP address
-- [ ] Tested frontend at `http://IP:8501`
-- [ ] Tested Spectral Analysis (FITS upload)
-- [ ] Tested Image Analysis (PKL upload)
-- [ ] Set up billing alerts ($50, $100, $150)
-
----
-
 ## 🆘 Troubleshooting
 
 ### **Service won't start:**
