@@ -248,24 +248,6 @@ gcloud compute firewall-rules update allow-mlflow \
   --source-ranges=YOUR_IP_ADDRESS/32
 ```
 
----
-
-## ✅ Deployment Checklist
-
-- [ ] Created VM on GCP
-- [ ] SSH'd into VM
-- [ ] Installed UV and dependencies
-- [ ] Configured `.env` file
-- [ ] Opened firewall ports
-- [ ] Started all 3 services in tmux
-- [ ] Got public IP address
-- [ ] Tested frontend at `http://IP:8501`
-- [ ] Tested Spectral Analysis (FITS upload)
-- [ ] Tested Image Analysis (PKL upload)
-- [ ] Set up billing alerts ($50, $100, $150)
-
----
-
 ## 🆘 Troubleshooting
 
 ### **Service won't start:**
@@ -294,14 +276,3 @@ gcloud compute instances set-machine-type astra-ai-vm \
   --zone=us-central1-a
 gcloud compute instances start astra-ai-vm --zone=us-central1-a
 ```
-
----
-
-## 🎯 Next Steps
-
-1. **Test locally first** (ensure everything works)
-2. **Push code to GitHub**
-3. **Follow this guide to deploy**
-4. **Share the `http://IP:8501` URL** with your team!
-
-**Your app will be live on the internet!** 🌐
